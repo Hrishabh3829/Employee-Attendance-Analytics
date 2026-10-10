@@ -12,7 +12,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Literal, Optional
 
-from bson import Decimal128, ObjectId
+from bson import Decimal128, ObjectId, Timestamp
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
@@ -223,6 +223,10 @@ def _derived_values(status: str, punch_in: Optional[datetime], punch_out: Option
 
 
 def _jsonable(value: Any) -> Any:
+    if isinstance(value, (bytes, bytearray)):
+        return value.hex()
+    if isinstance(value, Timestamp):
+        return {"time": value.time, "increment": value.inc}
     if isinstance(value, datetime):
         return _millis_from_datetime(value)
     if isinstance(value, Decimal128):
@@ -509,7 +513,7 @@ def _department_trend_pipeline(department: str, from_date: date, to_date: date) 
             ]},
             "late_count": {"$cond": [{"$gt": [{"$ifNull": ["$late_minutes", 0]}, 0]}, 1, 0]},
         }},
-        {"$unionWith": {"coll": "attendance_logs", "pipeline": [
+        {"$unionWith": {"pipeline": [
             {"$documents": [{"day": start_dt}, {"day": end_dt}]}
         ]}},
         {"$group": {"_id": "$day", "present_count": {"$sum": {"$ifNull": ["$present_count", 0]}},
